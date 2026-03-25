@@ -58,7 +58,7 @@ Instead of scrolling through a plain webpage, you **play through my portfolio** 
 - **Finish portal** at the right edge — triggers the "Thanks for Playing" screen
 
 ### 🎭 Character
-- **Brown-skinned Minecraft character** with animated walk cycle (8 frames)
+- **Minecraft character** with animated walk cycle (8 frames)
 - **Hammer swing** animation on block hit
 - **Double jump** with 360° flip animation
 - **Dash move** with speed blur trail
