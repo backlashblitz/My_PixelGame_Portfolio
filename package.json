@@ -1,0 +1,8 @@
+{
+  "name": "pixel-game-portfolio-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix my_pixel_game_portfolio run dev",
+    "build": "npm --prefix my_pixel_game_portfolio run build"
+  }
+}
