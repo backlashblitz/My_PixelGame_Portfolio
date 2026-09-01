@@ -1,6 +1,3 @@
 {
-  "buildCommand": "npm --prefix my_pixel_game_portfolio install && npm --prefix my_pixel_game_portfolio run build",
-  "outputDirectory": "my_pixel_game_portfolio/dist",
-  "installCommand": "npm --prefix my_pixel_game_portfolio install",
   "framework": "vite"
 }
