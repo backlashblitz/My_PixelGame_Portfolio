@@ -185,7 +185,7 @@ const LoadingScreen = memo(function LoadingScreen({ onDone }) {
           <div className="ls-block" style={{background:"#9a3412"}}/>
           <div className="ls-block" style={{background:"#9d174d"}}/>
         </div>
-        <div className="ls-title">RAHIN&apos;S WORLD</div>
+        <div className="ls-title">RAHIN&apos;S PORTFOLIO</div>
         <div className="ls-sub">Loading Adventure...</div>
         <div className="ls-bar-wrap">
           <div className="ls-bar-track">
@@ -1080,7 +1080,7 @@ export default function App() {
 
       {/* ── TOP BAR ── title center, controls left+right */}
       <div className="world-title-wrap">
-        <div className="wt-main"><span className="wt-sword">⚔</span> Rahin&apos;s World <span className="wt-sword">⚔</span></div>
+        <div className="wt-main"><span className="wt-sword">⚔</span> Rahin&apos;s Portfolio <span className="wt-sword">⚔</span></div>
         <div className="wt-sub">Portfolio Adventure — Walk &amp; Hit Blocks to Explore</div>
       </div>
 
