@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# ⚔️ Rahin's World — Pixel Portfolio Adventure
+# ⚔️ Rahin's Portfolio — Pixel Portfolio Adventure
 
 ### *A Minecraft-Inspired Interactive Portfolio Game built with React*
 
