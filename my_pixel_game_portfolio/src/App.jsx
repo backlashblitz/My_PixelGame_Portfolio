@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import portfolioData from "./data/portfolioData";
 import "./App.css";
 
@@ -50,6 +50,7 @@ function createAudio() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const play = (type, freq, duration, vol = 0.18) => {
+      if (ctx.state === "suspended") ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain); gain.connect(ctx.destination);
@@ -65,7 +66,6 @@ function createAudio() {
       jump:     () => { play("sine", 300, 0.05); setTimeout(() => play("sine", 500, 0.08, 0.1), 30); },
       dash:     () => play("sawtooth", 200, 0.12, 0.1),
       achieve:  () => { [523,659,784,1047].forEach((f,i) => setTimeout(() => play("sine", f, 0.15, 0.18), i*80)); },
-      bgMusic:  null,
       ctx,
       resume:   () => { if (ctx.state === "suspended") ctx.resume(); },
     };
@@ -89,8 +89,7 @@ function TW({ text, tag: Tag = "p", className = "", style = {} }) {
 }
 
 // ── CONFETTI ──────────────────────────────────────────────────────────────────
-// Pre-generate confetti pieces outside component so no hooks needed
-const CONFETTI_PIECES = Array.from({length:40},(_,i) => ({
+const CONFETTI_PIECES = Array.from({length:32},(_,i) => ({
   x: 15 + (i * 7.3 + 11) % 70,
   delay: (i * 0.13) % 0.35,
   color: ["#fde047","#f472b6","#34d399","#00e5ff","#c084fc","#fb923c"][i%6],
@@ -98,12 +97,11 @@ const CONFETTI_PIECES = Array.from({length:40},(_,i) => ({
   rotate: (i * 41) % 360,
 }));
 
-function Confetti({ active }) {
+const Confetti = memo(function Confetti({ active }) {
   if (!active) return null;
-  const pieces = CONFETTI_PIECES;
   return (
     <div className="confetti-wrap" aria-hidden>
-      {pieces.map((p,i) => (
+      {CONFETTI_PIECES.map((p,i) => (
         <div key={i} className="confetti-piece" style={{
           left:`${p.x}%`, background:p.color,
           width:p.size, height:p.size,
@@ -113,10 +111,10 @@ function Confetti({ active }) {
       ))}
     </div>
   );
-}
+});
 
 // ── ACHIEVEMENT TOAST ─────────────────────────────────────────────────────────
-function AchievementToast({ achievement, onDone }) {
+const AchievementToast = memo(function AchievementToast({ achievement, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3200); return () => clearTimeout(t); }, [onDone]);
   if (!achievement) return null;
   return (
@@ -128,20 +126,19 @@ function AchievementToast({ achievement, onDone }) {
       </div>
     </div>
   );
-}
+});
 
 // ── RAIN / SNOW ───────────────────────────────────────────────────────────────
-// Pre-generate weather drops (80 items covers both rain and snow counts)
-const RAIN_DROPS  = Array.from({length:80}, (_,i) => ({
+const RAIN_DROPS  = Array.from({length:45}, (_,i) => ({
   x: (i * 13.7) % 100, delay: (i * 0.23) % 2,
   dur: 0.6 + (i * 0.11) % 0.8, size: 1 + (i * 0.3) % 1,
 }));
-const SNOW_DROPS  = Array.from({length:60}, (_,i) => ({
+const SNOW_DROPS  = Array.from({length:35}, (_,i) => ({
   x: (i * 17.1) % 100, delay: (i * 0.31) % 2,
   dur: 1.2 + (i * 0.19) % 0.8, size: 3 + (i * 0.61) % 4,
 }));
 
-function Weather({ type }) {
+const Weather = memo(function Weather({ type }) {
   if (!type) return null;
   const drops = type === "snow" ? SNOW_DROPS : RAIN_DROPS;
   return (
@@ -157,24 +154,24 @@ function Weather({ type }) {
       ))}
     </div>
   );
-}
+});
 
 // ── LOADING SCREEN ────────────────────────────────────────────────────────────
-function LoadingScreen({ onDone }) {
+const LoadingScreen = memo(function LoadingScreen({ onDone }) {
   const [pct, setPct] = useState(0);
   useEffect(() => {
     const steps = [
-      {to:20, delay:80},  {to:45, delay:60},  {to:65, delay:90},
-      {to:80, delay:50},  {to:95, delay:70},  {to:100, delay:40},
+      {to:25, delay:60},  {to:55, delay:50},  {to:80, delay:60},
+      {to:100, delay:40},
     ];
     let p = 0;
     const run = () => {
-      if (p >= steps.length) { setTimeout(onDone, 300); return; }
+      if (p >= steps.length) { setTimeout(onDone, 200); return; }
       const s = steps[p++];
       setPct(s.to);
       setTimeout(run, s.delay);
     };
-    const t = setTimeout(run, 200);
+    const t = setTimeout(run, 100);
     return () => clearTimeout(t);
   }, [onDone]);
   return (
@@ -201,57 +198,20 @@ function LoadingScreen({ onDone }) {
       </div>
     </div>
   );
-}
+});
 
 // ── CHARACTER ─────────────────────────────────────────────────────────────────
-function Character({ x, bottomPx, facing, walking, swinging, idle, speech, dashing, jumpCount }) {
-  const [walkFrame, setWalkFrame] = useState(0);
-  const [hammerAngle, setHammerAngle] = useState(-40);
-  const [flipAngle, setFlipAngle] = useState(0);
-
-  useEffect(() => {
-    if (!walking || dashing) { setWalkFrame(0); return; }
-    const t = setInterval(() => setWalkFrame(f => (f+1)%8), 85);
-    return () => clearInterval(t);
-  }, [walking, dashing]);
-
-  useEffect(() => {
-    if (!swinging) { setHammerAngle(-40); return; }
-    let a = -40, going = true;
-    const t = setInterval(() => {
-      if (going) {
-        a -= 14;
-        if (a <= -130) going = false;
-      } else {
-        a += 14;
-        if (a >= -40) { clearInterval(t); a = -40; }
-      }
-      setHammerAngle(a);
-    }, 18);
-    return () => clearInterval(t);
-  }, [swinging]);
-
-  // Flip on double-jump
-  useEffect(() => {
-    if (jumpCount < 2) { setFlipAngle(0); return; }
-    let a = 0;
-    const t = setInterval(() => {
-      a += 24; if (a >= 360) { clearInterval(t); setFlipAngle(0); return; }
-      setFlipAngle(a);
-    }, 12);
-    return () => clearInterval(t);
-  }, [jumpCount]);
-
-  const WA = [18,28,18,0,-18,-28,-18,0];
-  const lL = walking && !dashing ? WA[walkFrame] : 0;
-  const lR = walking && !dashing ? -WA[walkFrame] : 0;
-  const aL = walking && !dashing ? -WA[walkFrame]*0.6 : (dashing ? -50 : 0);
-
+const Character = memo(function Character({ charRef, facing, walking, swinging, idle, speech, dashing, isFlipping }) {
   return (
-    <div className="char-root" style={{
-      left:`${x}%`, bottom:`${bottomPx}px`,
-      transform:`scaleX(${facing==="right"?1:-1}) rotate(${flipAngle}deg)`,
-    }}>
+    <div
+      ref={charRef}
+      className={`char-root ${walking ? "char-walking" : ""} ${swinging ? "char-swinging" : ""} ${isFlipping ? "char-flip" : ""}`}
+      style={{
+        left: `3%`,
+        bottom: `${GROUND_PX}px`,
+        transform: `scaleX(${facing === "right" ? 1 : -1})`,
+      }}
+    >
       {/* Floating name tag */}
       <div className="char-nametag" style={{transform:`scaleX(${facing==="right"?1:-1})`}}>
         Rahin ⚔
@@ -277,11 +237,11 @@ function Character({ x, bottomPx, facing, walking, swinging, idle, speech, dashi
       </div>
       <div className="ch-neck"/>
       <div className="ch-body-row">
-        <div className="ch-arm ch-al" style={{transform:`rotate(${idle?20:aL}deg)`}}/>
+        <div className="ch-arm ch-al" style={{transform: idle ? "rotate(20deg)" : (dashing ? "rotate(-50deg)" : undefined)}}/>
         <div className="ch-torso">
           <div className="ch-stripe"/><div className="ch-belt"/>
         </div>
-        <div className="ch-arm ch-ar" style={{transform:`rotate(${idle?20:hammerAngle}deg)`}}>
+        <div className="ch-arm ch-ar" style={{transform: idle ? "rotate(20deg)" : undefined}}>
           <div className="ch-hammer">
             <div className="ch-hhandle"/>
             <div className="ch-hhead"><div className="ch-hshine"/></div>
@@ -301,27 +261,27 @@ function Character({ x, bottomPx, facing, walking, swinging, idle, speech, dashi
         </div>
       ) : (
         <div className="ch-legs">
-          <div className="ch-leg" style={{transform:`rotate(${lL}deg)`}}><div className="ch-boot"/></div>
-          <div className="ch-leg" style={{transform:`rotate(${lR}deg)`}}><div className="ch-boot"/></div>
+          <div className="ch-leg l"><div className="ch-boot"/></div>
+          <div className="ch-leg r"><div className="ch-boot"/></div>
         </div>
       )}
       <div className="ch-shadow"/>
     </div>
   );
-}
+});
 
 // ── COIN ──────────────────────────────────────────────────────────────────────
-function Coin({ x, collected }) {
+const Coin = memo(function Coin({ x, collected }) {
   if (collected) return null;
   return (
     <div className="coin" style={{left:`${x}%`}}>
       <div className="coin-inner">$</div>
     </div>
   );
-}
+});
 
 // ── BLOCK ─────────────────────────────────────────────────────────────────────
-function Block({ sec, glowing, shaking, visited, onClick }) {
+const Block = memo(function Block({ sec, glowing, shaking, visited, onClick }) {
   return (
     <div className={`mc-blk ${shaking?"blk-shake":""} ${glowing?"blk-glow":""}`}
       style={{"--ct":sec.top,"--cf":sec.front,"--cs":sec.side,"--cc":sec.color}}
@@ -336,10 +296,10 @@ function Block({ sec, glowing, shaking, visited, onClick }) {
       <div className="blk-side"/>
     </div>
   );
-}
+});
 
 // ── SECTION COLUMN ────────────────────────────────────────────────────────────
-function SectionCol({ sec, near, active, visited, onHit }) {
+const SectionCol = memo(function SectionCol({ sec, near, active, visited, onHit }) {
   const [shaking, setShaking] = useState(false);
   const [pts, setPts]         = useState([]);
 
@@ -366,10 +326,10 @@ function SectionCol({ sec, near, active, visited, onHit }) {
       {active && <div className="active-beam" style={{background:sec.color}}/>}
     </div>
   );
-}
+});
 
 // ── MINIMAP (top-right corner, compact) ───────────────────────────────────────
-function MiniMap({ charX, visited }) {
+const MiniMap = memo(function MiniMap({ miniPlayerRef, visited }) {
   return (
     <div className="minimap">
       <div className="mm-header">
@@ -385,14 +345,14 @@ function MiniMap({ charX, visited }) {
             boxShadow: visited.has(s.id) ? `0 0 4px ${s.color}` : "none",
           }}/>
         ))}
-        <div className="mm-player" style={{left:`${charX}%`}}/>
+        <div ref={miniPlayerRef} className="mm-player" style={{left:"3%"}}/>
       </div>
     </div>
   );
-}
+});
 
-// ── PROGRESS BAR (bottom-left, vertical compact) ──────────────────────────────
-function ProgressBar({ opened }) {
+// ── PROGRESS BAR ─────────────────────────────────────────────────────────────
+const ProgressBar = memo(function ProgressBar({ opened }) {
   const pct = (opened / TOTAL_SECS) * 100;
   const clrs = ["#00e5ff","#fbbf24","#c084fc","#34d399","#fb923c","#f472b6"];
   return (
@@ -422,10 +382,10 @@ function ProgressBar({ opened }) {
       )}
     </div>
   );
-}
+});
 
 // ── PORTAL ────────────────────────────────────────────────────────────────────
-function Portal({ onEnter }) {
+const Portal = memo(function Portal({ onEnter }) {
   return (
     <div className="portal" onClick={onEnter}>
       <div className="portal-ring r1"/>
@@ -437,11 +397,10 @@ function Portal({ onEnter }) {
       <div className="portal-label">FINISH<br/>→ END</div>
     </div>
   );
-}
+});
 
 // ── FINISH / THANKS PANEL ────────────────────────────────────────────────────
-// Restart = window.location.reload() — guaranteed clean state, no stale ref issues
-function FinishPanel() {
+const FinishPanel = memo(function FinishPanel() {
   const s = portfolioData.hero.social;
   const restart = () => window.location.reload();
 
@@ -512,11 +471,10 @@ function FinishPanel() {
       </div>
     </div>
   );
-}
-
+});
 
 // ── MODAL ──────────────────────────────────────────────────────────────────────
-function Modal({ title, color, onClose, children, wide }) {
+const Modal = memo(function Modal({ title, color, onClose, children, wide }) {
   useEffect(() => {
     const fn = e => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", fn);
@@ -539,19 +497,19 @@ function Modal({ title, color, onClose, children, wide }) {
       </div>
     </div>
   );
-}
+});
 
 // ── PANELS ────────────────────────────────────────────────────────────────────
-function AboutPanel({ onClose }) {
+const AboutPanel = memo(function AboutPanel({ onClose }) {
   const d = portfolioData.aboutMe;
   return (
     <Modal title="About Me" color={d.color} onClose={onClose}>
       <div className="ab-wrap">
         <div className="ab-left">
           <p className="ab-desc">
-            Hello! I'm <b style={{color:"#00e5ff"}}>Rahin Arefin Ahmed</b>, an aspiring{" "}
+            Hello! I&apos;m <b style={{color:"#00e5ff"}}>Rahin Arefin Ahmed</b>, an aspiring{" "}
             <span style={{color:"#00e5ff"}}>Computer Science Student</span> from Dhaka, Bangladesh,
-            currently pursuing my Bachelor's degree at East West University, with a passion for{" "}
+            currently pursuing my Bachelor&apos;s degree at East West University, with a passion for{" "}
             <span style={{color:"#c084fc"}}>Data Science</span> and{" "}
             <span style={{color:"#c084fc"}}>Software Development</span>.
           </p>
@@ -567,14 +525,14 @@ function AboutPanel({ onClose }) {
               <div><div className="ab-det-lbl">{det.label}</div><div className="ab-det-val">{det.value}</div></div>
             </div>
           ))}
-          <a href={portfolioData.hero.social.linkedin} target="_blank" rel="noreferrer" className="ab-connect">Let's Connect →</a>
+          <a href={portfolioData.hero.social.linkedin} target="_blank" rel="noreferrer" className="ab-connect">Let&apos;s Connect →</a>
         </div>
       </div>
     </Modal>
   );
-}
+});
 
-function SkillsPanel({ onClose }) {
+const SkillsPanel = memo(function SkillsPanel({ onClose }) {
   const d = portfolioData.skills;
   return (
     <Modal title="Technical Skills" color={d.color} onClose={onClose}>
@@ -592,9 +550,9 @@ function SkillsPanel({ onClose }) {
       </div>
     </Modal>
   );
-}
+});
 
-function ProjectsPanel({ onClose }) {
+const ProjectsPanel = memo(function ProjectsPanel({ onClose }) {
   const d = portfolioData.projects;
   return (
     <Modal title="Featured Projects" color={d.color} onClose={onClose} wide>
@@ -614,9 +572,9 @@ function ProjectsPanel({ onClose }) {
       </div>
     </Modal>
   );
-}
+});
 
-function PubsPanel({ onClose }) {
+const PubsPanel = memo(function PubsPanel({ onClose }) {
   const d = portfolioData.publications;
   return (
     <Modal title="Academic Publications" color={d.color} onClose={onClose}>
@@ -633,9 +591,9 @@ function PubsPanel({ onClose }) {
       </div>
     </Modal>
   );
-}
+});
 
-function AwardsPanel({ onClose }) {
+const AwardsPanel = memo(function AwardsPanel({ onClose }) {
   const d = portfolioData.awards;
   const [viewing, setViewing] = useState(null);
   return (
@@ -665,9 +623,9 @@ function AwardsPanel({ onClose }) {
       )}
     </Modal>
   );
-}
+});
 
-function ContactPanel({ onClose }) {
+const ContactPanel = memo(function ContactPanel({ onClose }) {
   const s = portfolioData.hero.social;
   const links = [
     {label:"LinkedIn", url:s.linkedin, color:"#0a66c2", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/><circle cx="4" cy="4" r="2"/></svg>},
@@ -691,24 +649,20 @@ function ContactPanel({ onClose }) {
       </div>
     </Modal>
   );
-}
+});
 
 // ── SKY ────────────────────────────────────────────────────────────────────────
-const SKY_STARS = Array.from({length:80},(_,i) => ({
+const SKY_STARS = Array.from({length:50},(_,i) => ({
   x:(i*17.3)%100, y:(i*13.1)%60, s:i%5===0?3:i%3===0?2:1, d:(i*0.41)%4
 }));
 
-function Sky({ isDay, parallaxX }) {
-  const stars = SKY_STARS;
-  const mtnOffset = parallaxX * 0.12;
-  const cloudOffset = parallaxX * 0.25;
-
+const Sky = memo(function Sky({ isDay, mtnRef, cloudRef }) {
   return (
     <>
       <div className={`sky-bg ${isDay?"sky-day":"sky-night"}`}/>
       {!isDay && (
         <div className="sky-stars">
-          {stars.map((s,i) => <div key={i} className="sstar" style={{left:`${s.x}%`,top:`${s.y}%`,width:s.s,height:s.s,animationDelay:`${s.d}s`}}/>)}
+          {SKY_STARS.map((s,i) => <div key={i} className="sstar" style={{left:`${s.x}%`,top:`${s.y}%`,width:s.s,height:s.s,animationDelay:`${s.d}s`}}/>)}
         </div>
       )}
       {isDay ? (
@@ -724,12 +678,12 @@ function Sky({ isDay, parallaxX }) {
       {!isDay && <div className="aurora-layer"><div className="aur a1"/><div className="aur a2"/><div className="aur a3"/></div>}
 
       {/* Parallax mountains */}
-      <div className="mtn-layer" style={{transform:`translateX(${-mtnOffset}px)`}}>
+      <div ref={mtnRef} className="mtn-layer">
         <div className="mtn m1"/><div className="mtn m2"/><div className="mtn m3"/><div className="mtn m4"/>
       </div>
 
       {/* Parallax clouds */}
-      <div className="cloud-layer" style={{transform:`translateX(${-cloudOffset}px)`}}>
+      <div ref={cloudRef} className="cloud-layer">
         {[6,28,52,74].map((x,i) => (
           <div key={i} className={`pcloud pc${i}`} style={{left:`${x}%`}}>
             {[...Array(5)].map((_,j) => <div key={j} className={`pcb ${isDay?"pcb-day":""}`}/>)}
@@ -744,15 +698,15 @@ function Sky({ isDay, parallaxX }) {
       ))}
     </>
   );
-}
+});
 
 // ── GROUND ────────────────────────────────────────────────────────────────────
-function Ground() {
+const Ground = memo(function Ground() {
   return (
     <div className="gnd-wrap">
       <div className="gnd-grass"><div className="gnd-grassline"/></div>
       <div className="gnd-dirt">
-        {Array.from({length:30}).map((_,i) => <div key={i} className="gnd-seam" style={{left:`${i*3.5}%`}}/>)}
+        {Array.from({length:20}).map((_,i) => <div key={i} className="gnd-seam" style={{left:`${i*5}%`}}/>)}
       </div>
       {[10,28,50,68,88].map((x,i) => (
         <div key={i} className="torch" style={{left:`${x}%`}}>
@@ -762,54 +716,59 @@ function Ground() {
       {[18,38,58,80].map((x,i) => <div key={i} className="gnd-flower" style={{left:`${x}%`}}>🌸</div>)}
     </div>
   );
-}
+});
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 export default function App() {
-  const [loaded,    setLoaded]    = useState(false);
-  const [charX,     setCharX]     = useState(3);
-  const [charBot,   setCharBot]   = useState(GROUND_PX);
-  const [onGnd,     setOnGnd]     = useState(true);
-  const [facing,    setFacing]    = useState("right");
-  const [walking,   setWalking]   = useState(false);
-  const [swinging,  setSwinging]  = useState(false);
-  const [dashing,   setDashing]   = useState(false);
-  const [jumpCount, setJumpCount] = useState(0);
-  const [parallaxX, setParallaxX] = useState(0);
+  const [loaded,       setLoaded]       = useState(false);
+  const [facing,       setFacing]       = useState("right");
+  const [walking,      setWalking]      = useState(false);
+  const [swinging,     setSwinging]     = useState(false);
+  const [dashing,      setDashing]      = useState(false);
+  const [isFlipping,   setIsFlipping]   = useState(false);
 
-  const [isDay,       setIsDay]       = useState(false);
-  const [weather,     setWeather]     = useState(null); // null | "rain" | "snow"
-  const [musicOn,     setMusicOn]     = useState(false);
-  const [shake,       setShake]       = useState(false);
-  const [confetti,    setConfetti]    = useState(false);
-  const [coins,       setCoins]       = useState(new Set());
-  const [score,       setScore]       = useState(0);
-  const [idle,        setIdle]        = useState(false);
-  const [speech,      setSpeech]      = useState(SPEECH_TIPS[0]);
-  const [showSpeech,  setShowSpeech]  = useState(true);
-  const [achievement, setAchievement] = useState(null);
-  const [showFinish,  setShowFinish]  = useState(false);
-  const [activePanel, setActivePanel] = useState(null);
-  const [nearId,      setNearId]      = useState(null);
-  const [opened,      setOpened]      = useState(new Set());
-  const [showIntro,   setShowIntro]   = useState(true);
-  // Keep ref in sync with state so keyboard listener (closure) reads correct value
+  const [isDay,        setIsDay]        = useState(false);
+  const [weather,      setWeather]      = useState(null); // null | "rain" | "snow"
+  const [musicOn,      setMusicOn]      = useState(false);
+  const [shake,        setShake]        = useState(false);
+  const [confetti,     setConfetti]     = useState(false);
+  const [coins,        setCoins]        = useState(new Set());
+  const [score,        setScore]        = useState(0);
+  const [idle,         setIdle]         = useState(false);
+  const [speech,       setSpeech]       = useState(SPEECH_TIPS[0]);
+  const [showSpeech,   setShowSpeech]   = useState(true);
+  const [achievement,  setAchievement]  = useState(null);
+  const [showFinish,   setShowFinish]   = useState(false);
+  const [activePanel,  setActivePanel]  = useState(null);
+  const [nearId,       setNearId]       = useState(null);
+  const [opened,       setOpened]       = useState(new Set());
+  const [showIntro,    setShowIntro]    = useState(true);
+
+  // DOM Refs for direct 60fps+ updates (bypasses React reconciliation overhead)
+  const charRef        = useRef(null);
+  const miniPlayerRef  = useRef(null);
+  const mtnRef         = useRef(null);
+  const cloudRef       = useRef(null);
+
+  // State mirror refs for event listeners and animation loop
+  const keys           = useRef({});
+  const ref            = useRef({ x:3, bot:GROUND_PX, vy:0, onGnd:true, jumps:0 });
+  const raf            = useRef();
+  const idleTimer      = useRef(null);
+  const dashTimer      = useRef(null);
+  const firstOpen      = useRef(new Set());
+  const unlockedAch    = useRef(new Set());
+  const audio          = useRef(null);
+  const bgOsc          = useRef(null);
+  const introActive    = useRef(true);
+  const finishTriggered= useRef(false);
+  const coinsRef       = useRef(new Set());
+  const walkingRef     = useRef(false);
+  const facingRef      = useRef("right");
+  const nearRef        = useRef(null);
+  const parallaxXRef   = useRef(0);
+
   const setIntroWrapper = (val) => { introActive.current = val; setShowIntro(val); };
-
-  const keys        = useRef({});
-  const ref         = useRef({ x:3, bot:GROUND_PX, vy:0, onGnd:true, jumps:0 });
-  const raf         = useRef();
-  const idleTimer   = useRef(null);
-  const dashTimer   = useRef(null);
-  const stepTimer   = useRef(null);
-  const firstOpen   = useRef(new Set());
-  const unlockedAch = useRef(new Set());
-  const audio       = useRef(null);
-  const bgOsc       = useRef(null);
-  const bgGain      = useRef(null);
-  // Refs that mirror state so keyboard/gameloop closures always read current values
-  const introActive  = useRef(true);   // true = intro screen showing
-  const finishTriggered = useRef(false); // prevent re-triggering every frame
 
   // Init audio on first interaction
   const initAudio = useCallback(() => {
@@ -817,19 +776,17 @@ export default function App() {
     audio.current.resume();
   }, []);
 
-  // Background 8-bit music — use ref for loop so toggle always works
+  // Background 8-bit music
   const musicOnRef = useRef(false);
   const toggleMusic = useCallback(() => {
     initAudio();
     const ctx = audio.current?.ctx;
     if (!ctx) return;
     if (musicOnRef.current) {
-      // STOP
       if (bgOsc.current) { clearInterval(bgOsc.current); bgOsc.current = null; }
       musicOnRef.current = false;
       setMusicOn(false);
     } else {
-      // START
       const notes = [261,294,330,349,392,440,392,349,330,294,523,440,392,330];
       let ni = 0;
       const playNote = () => {
@@ -840,7 +797,7 @@ export default function App() {
           osc.connect(g); g.connect(ctx.destination);
           osc.type = "square";
           osc.frequency.setValueAtTime(notes[ni % notes.length], ctx.currentTime);
-          g.gain.setValueAtTime(0.055, ctx.currentTime);
+          g.gain.setValueAtTime(0.04, ctx.currentTime);
           g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
           osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.22);
           ni++;
@@ -852,7 +809,6 @@ export default function App() {
     }
   }, [initAudio]);
 
-  // Stop music on unmount
   useEffect(() => () => { if (bgOsc.current) { clearInterval(bgOsc.current); bgOsc.current = null; } }, []);
 
   // Check achievements
@@ -876,18 +832,18 @@ export default function App() {
       setSpeech(SPEECH_TIPS[i]);
       setShowSpeech(true);
       setTimeout(() => setShowSpeech(false), 2500);
-    }, 4500);
+    }, 5500);
     setTimeout(() => setShowSpeech(false), 2500);
     return () => clearInterval(t);
   }, []);
 
   const getNear = useCallback(x => {
-    for (const s of SECTIONS) if (Math.abs(x - s.x) < 6) return s.id;
+    for (const s of SECTIONS) if (Math.abs(x - s.x) < 5) return s.id;
     return null;
   }, []);
 
   const doSwing = useCallback(() => {
-    setSwinging(true); setTimeout(() => setSwinging(false), 500);
+    setSwinging(true); setTimeout(() => setSwinging(false), 380);
   }, []);
   const doShake = useCallback(() => {
     setShake(true); setTimeout(() => setShake(false), 400);
@@ -907,35 +863,34 @@ export default function App() {
       if (next) {
         setOpened(o => {
           const ns = new Set([...o, id]);
-          checkAchievements(ns, coins);
+          checkAchievements(ns, coinsRef.current);
           return ns;
         });
       }
       return next;
     });
-  }, [doSwing, doShake, initAudio, coins, checkAchievements]);
+  }, [doSwing, doShake, initAudio, checkAchievements]);
 
   const resetIdle = useCallback(() => {
     setIdle(false);
     clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => setIdle(true), 5000);
+    idleTimer.current = setTimeout(() => setIdle(true), 6000);
   }, []);
 
   const doDash = useCallback(() => {
-    if (dashTimer.current) return; // cooldown
+    if (dashTimer.current) return;
     initAudio();
     audio.current?.dash();
     setDashing(true);
     dashTimer.current = setTimeout(() => {
       setDashing(false);
       dashTimer.current = null;
-    }, DASH_DUR + 400); // cooldown
+    }, DASH_DUR + 350);
   }, [initAudio]);
 
   // Keyboard
   useEffect(() => {
     const dn = e => {
-      // Block ALL game keys while intro or finish panel is visible
       if (introActive.current) return;
       keys.current[e.code] = true;
       if (["Space","ArrowUp","ArrowLeft","ArrowRight","KeyA","KeyD","KeyW","ShiftLeft","ShiftRight"].includes(e.code))
@@ -951,18 +906,16 @@ export default function App() {
         if (near) { openSection(near); return; }
         const j = ref.current.jumps;
         if (j === 0 && ref.current.onGnd) {
-          // first jump
           doSwing();
           ref.current.vy = JUMP_V;
           ref.current.onGnd = false;
           ref.current.jumps = 1;
-          setJumpCount(1);
           audio.current?.jump();
         } else if (j === 1) {
-          // double jump
           ref.current.vy = JUMP_V2;
           ref.current.jumps = 2;
-          setJumpCount(2);
+          setIsFlipping(true);
+          setTimeout(() => setIsFlipping(false), 450);
           audio.current?.jump();
         }
       }
@@ -973,59 +926,101 @@ export default function App() {
     return () => { window.removeEventListener("keydown", dn); window.removeEventListener("keyup", up); };
   }, [getNear, openSection, doSwing, resetIdle, doDash, initAudio]);
 
-  // Game loop
+  // Ultra-optimized 60+ FPS Game loop
   useEffect(() => {
     let last = performance.now();
     let stepAcc = 0;
     const loop = now => {
-      const dt = Math.min((now-last)/16.67, 3); last = now;
+      const dt = Math.min((now - last) / 16.67, 2.5);
+      last = now;
+
       let { x, bot, vy, onGnd: og, jumps: jc } = ref.current;
       let moved = false;
+      let newFacing = facingRef.current;
 
-      const spd = dashing ? DASH_SPEED : SPEED;
-      if (keys.current["ArrowLeft"]  || keys.current["KeyA"]) { x = Math.max(1, x - spd*dt);  setFacing("left");  moved = true; }
-      if (keys.current["ArrowRight"] || keys.current["KeyD"]) { x = Math.min(92, x + spd*dt); setFacing("right"); moved = true; }
-      if (moved) { resetIdle(); setParallaxX(px => px + (keys.current["ArrowRight"]||keys.current["KeyD"] ? 1 : -1)*0.5); }
+      const spd = (dashing ? DASH_SPEED : SPEED) * dt;
+      if (keys.current["ArrowLeft"]  || keys.current["KeyA"]) {
+        x = Math.max(1, x - spd);
+        newFacing = "left";
+        moved = true;
+      }
+      if (keys.current["ArrowRight"] || keys.current["KeyD"]) {
+        x = Math.min(92, x + spd);
+        newFacing = "right";
+        moved = true;
+      }
+
+      if (moved) {
+        resetIdle();
+        parallaxXRef.current += (newFacing === "right" ? 1 : -1) * 0.5 * dt;
+      }
 
       bot += vy * dt;
       vy  -= GRAV * dt;
       if (bot <= GROUND_PX) {
         bot = GROUND_PX; vy = 0; og = true;
-        if (jc > 0) { jc = 0; setJumpCount(0); }
-      } else og = false;
+        if (jc > 0) jc = 0;
+      } else {
+        og = false;
+      }
 
       ref.current = { x, bot, vy, onGnd: og, jumps: jc };
-      setCharX(x); setCharBot(bot); setOnGnd(og);
 
-      const mv = moved && og;
-      setWalking(mv);
+      // 1. Direct hardware-accelerated DOM positioning
+      if (charRef.current) {
+        charRef.current.style.left = `${x}%`;
+        charRef.current.style.bottom = `${bot}px`;
+      }
+      if (miniPlayerRef.current) {
+        miniPlayerRef.current.style.left = `${x}%`;
+      }
+      if (mtnRef.current) {
+        mtnRef.current.style.transform = `translateX(${-parallaxXRef.current * 0.12}px)`;
+      }
+      if (cloudRef.current) {
+        cloudRef.current.style.transform = `translateX(${-parallaxXRef.current * 0.25}px)`;
+      }
+
+      // 2. Discrete state updates only when state actually changed
+      if (newFacing !== facingRef.current) {
+        facingRef.current = newFacing;
+        setFacing(newFacing);
+      }
+
+      const isWalking = moved && og;
+      if (isWalking !== walkingRef.current) {
+        walkingRef.current = isWalking;
+        setWalking(isWalking);
+      }
 
       // Footstep sound
-      if (mv) {
+      if (isWalking) {
         stepAcc += dt;
-        if (stepAcc > 8) { audio.current?.step(); stepAcc = 0; }
-      } else stepAcc = 0;
+        if (stepAcc > 10) { audio.current?.step(); stepAcc = 0; }
+      } else {
+        stepAcc = 0;
+      }
 
       const near = getNear(x);
-      setNearId(near);
+      if (near !== nearRef.current) {
+        nearRef.current = near;
+        setNearId(near);
+      }
 
-      // Coin collection
-      COIN_DEFS.forEach(coin => {
-        setCoins(prev => {
-          if (prev.has(coin.id)) return prev;
-          if (Math.abs(x - coin.x) < 2.5) {
-            const ns = new Set(prev);
-            ns.add(coin.id);
-            audio.current?.coin();
-            setScore(s => s + 50);
-            setOpened(o => { checkAchievements(o, ns); return o; });
-            return ns;
-          }
-          return prev;
-        });
-      });
+      // 3. Coin collection (checked purely with math, no redundant setState)
+      for (let i = 0; i < COIN_DEFS.length; i++) {
+        const coin = COIN_DEFS[i];
+        if (!coinsRef.current.has(coin.id) && Math.abs(x - coin.x) < 2.5) {
+          coinsRef.current.add(coin.id);
+          const ns = new Set(coinsRef.current);
+          audio.current?.coin();
+          setCoins(ns);
+          setScore(s => s + 50);
+          setOpened(o => { checkAchievements(o, ns); return o; });
+        }
+      }
 
-      // Portal check — only trigger once, not every frame
+      // 4. Portal check
       if (x > 90.5 && !finishTriggered.current) {
         finishTriggered.current = true;
         setShowFinish(true);
@@ -1033,9 +1028,13 @@ export default function App() {
 
       raf.current = requestAnimationFrame(loop);
     };
+
     raf.current = requestAnimationFrame(loop);
-    idleTimer.current = setTimeout(() => setIdle(true), 5000);
-    return () => { cancelAnimationFrame(raf.current); clearTimeout(idleTimer.current); };
+    idleTimer.current = setTimeout(() => setIdle(true), 6000);
+    return () => {
+      cancelAnimationFrame(raf.current);
+      clearTimeout(idleTimer.current);
+    };
   }, [getNear, resetIdle, checkAchievements, dashing]);
 
   const PANELS = {
@@ -1054,8 +1053,19 @@ export default function App() {
     const near = getNear(ref.current.x);
     if (near) { openSection(near); return; }
     const j = ref.current.jumps;
-    if (j === 0 && ref.current.onGnd) { doSwing(); ref.current.vy = JUMP_V; ref.current.onGnd = false; ref.current.jumps = 1; setJumpCount(1); audio.current?.jump(); }
-    else if (j === 1) { ref.current.vy = JUMP_V2; ref.current.jumps = 2; setJumpCount(2); audio.current?.jump(); }
+    if (j === 0 && ref.current.onGnd) {
+      doSwing();
+      ref.current.vy = JUMP_V;
+      ref.current.onGnd = false;
+      ref.current.jumps = 1;
+      audio.current?.jump();
+    } else if (j === 1) {
+      ref.current.vy = JUMP_V2;
+      ref.current.jumps = 2;
+      setIsFlipping(true);
+      setTimeout(() => setIsFlipping(false), 450);
+      audio.current?.jump();
+    }
   };
 
   const weatherCycle = () => setWeather(w => w === null ? "rain" : w === "rain" ? "snow" : null);
@@ -1065,7 +1075,7 @@ export default function App() {
   return (
     <div className={`world-root ${shake?"world-shake":""} ${isDay?"is-day":""}`}
       onMouseMove={initAudio} onKeyDown={initAudio}>
-      <Sky isDay={isDay} parallaxX={parallaxX}/>
+      <Sky isDay={isDay} mtnRef={mtnRef} cloudRef={cloudRef}/>
       <Weather type={weather}/>
 
       {/* ── TOP BAR ── title center, controls left+right */}
@@ -1092,11 +1102,11 @@ export default function App() {
         <div className="hud-hearts">❤️ ❤️ ❤️</div>
         <div className="hud-score">SCORE: {score + opened.size * 100}</div>
         <div className="hud-coins">🪙 {coins.size} coins</div>
-        <div className="hud-tip">← →  Move | SPACE Jump/Hit | SHIFT Dash</div>
+        <div className="hud-tip">← → Move | SPACE Jump/Hit | SHIFT Dash</div>
       </div>
 
       {/* MiniMap — top right below HUD */}
-      <MiniMap charX={charX} visited={opened}/>
+      <MiniMap miniPlayerRef={miniPlayerRef} visited={opened}/>
 
       {/* Progress bar — below title pill */}
       <ProgressBar opened={opened.size}/>
@@ -1116,10 +1126,14 @@ export default function App() {
 
       {/* Character */}
       <Character
-        x={charX} bottomPx={charBot} facing={facing}
-        walking={walking} swinging={swinging} idle={idle}
-        dashing={dashing} jumpCount={jumpCount}
-        speech={showSpeech && !walking && onGnd && !idle ? speech : null}
+        charRef={charRef}
+        facing={facing}
+        walking={walking}
+        swinging={swinging}
+        idle={idle}
+        dashing={dashing}
+        isFlipping={isFlipping}
+        speech={showSpeech && !walking && !idle ? speech : null}
       />
 
       <Ground/>

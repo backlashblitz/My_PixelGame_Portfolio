@@ -103,8 +103,8 @@ body{font-family:'Outfit',sans-serif;background:#020510;user-select:none;}
 .sun-ray::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:4px;height:14px;background:#fde047;}
 
 /* AURORA */
-.aurora-layer{position:absolute;top:0;left:0;width:100%;height:45%;z-index:1;pointer-events:none;}
-.aur{position:absolute;top:0;left:0;width:100%;filter:blur(50px);opacity:.2;}
+.aurora-layer{position:absolute;top:0;left:0;width:100%;height:45%;z-index:1;pointer-events:none;contain:paint;}
+.aur{position:absolute;top:0;left:0;width:100%;filter:blur(20px);opacity:.2;transform:translateZ(0);will-change:transform;}
 .a1{height:180px;background:linear-gradient(135deg,#00e5ff 0%,transparent 60%);animation:aurs 12s ease-in-out infinite alternate;}
 .a2{height:130px;background:linear-gradient(165deg,transparent 20%,#a855f7 50%,transparent 80%);animation:aurs 18s ease-in-out infinite alternate-reverse;}
 .a3{height:110px;background:linear-gradient(145deg,transparent 30%,#34d399 60%,transparent 90%);animation:aurs 15s ease-in-out infinite alternate;}
@@ -222,7 +222,7 @@ body{font-family:'Outfit',sans-serif;background:#020510;user-select:none;}
 .mm-world{height:22px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);position:relative;overflow:hidden;}
 .mm-ground{position:absolute;bottom:0;left:0;right:0;height:5px;background:#16a34a;}
 .mm-block{position:absolute;bottom:5px;width:8px;height:10px;transform:translateX(-50%);transition:background .3s,box-shadow .3s;image-rendering:pixelated;}
-.mm-player{position:absolute;bottom:5px;width:5px;height:10px;background:#c68642;border:1px solid #8b4513;transform:translateX(-50%);transition:left .04s linear;}
+.mm-player{position:absolute;bottom:5px;width:5px;height:10px;background:#c68642;border:1px solid #8b4513;transform:translateX(-50%);will-change:left;}
 .mm-player::after{content:'';position:absolute;top:-5px;left:0;width:5px;height:5px;background:#c68642;border:1px solid #8b4513;}
 
 /* ════════════════════════════════════
@@ -300,7 +300,20 @@ body{font-family:'Outfit',sans-serif;background:#020510;user-select:none;}
   --pants:#37474f;--pants-d:#263238;--boot:#1a1a1a;
   --ham-wood:#6d4c41;--ham-met:#b0bec5;--ham-met-d:#546e7a;
 }
-.char-root{position:absolute;width:52px;z-index:8;image-rendering:pixelated;transition:left .04s linear;}
+.char-root{position:absolute;width:52px;z-index:8;image-rendering:pixelated;will-change:transform,left,bottom;}
+.char-walking .ch-leg.l{animation:ch-walk-l .24s ease-in-out infinite alternate;}
+.char-walking .ch-leg.r{animation:ch-walk-r .24s ease-in-out infinite alternate;}
+.char-walking .ch-al{animation:ch-arm-walk .24s ease-in-out infinite alternate;}
+@keyframes ch-walk-l{from{transform:rotate(28deg)}to{transform:rotate(-28deg)}}
+@keyframes ch-walk-r{from{transform:rotate(-28deg)}to{transform:rotate(28deg)}}
+@keyframes ch-arm-walk{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
+
+.char-swinging .ch-ar{animation:ch-swing .38s ease-in-out;}
+@keyframes ch-swing{0%{transform:rotate(20deg)}40%{transform:rotate(-130deg)}100%{transform:rotate(-40deg)}}
+
+.char-flip{animation:ch-flip .45s cubic-bezier(.4,0,.2,1);}
+@keyframes ch-flip{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
 .ch-head{width:30px;height:30px;background:var(--skin);border:2px solid var(--skin-d);margin:0 auto;position:relative;box-shadow:inset -5px -5px 0 var(--skin-s);}
 .ch-hair{position:absolute;top:-5px;left:-2px;width:34px;height:11px;background:var(--hair);border:2px solid #1a0a02;}
 .ch-face{position:absolute;inset:0;}
